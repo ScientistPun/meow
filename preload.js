@@ -18,6 +18,7 @@ const api = {
   loadConfig: () => ipcRenderer.invoke('load-config'),
   getConfigYml: () => ipcRenderer.invoke('get-config-yml'),
   saveConfigYml: (content) => ipcRenderer.invoke('save-config-yml', content),
+  saveConfigObj: (config) => ipcRenderer.invoke('save-config-obj', config),
 
   // 日志管理
   getLogs: () => ipcRenderer.invoke('get-logs'),

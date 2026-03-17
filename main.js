@@ -9,6 +9,7 @@ const fs = require('fs')
 const path = require('path')
 const yaml = require('js-yaml')
 const axios = require('axios')
+const APP_NAME = 'Seedream Tools'
 
 let mainWindow
 
@@ -144,7 +145,7 @@ ipcMain.handle('save-config-yml', (e, content) => {
     fs.writeFileSync(getConfigPath(), content, 'utf8')
     dialog.showMessageBoxSync({
       type: 'info',
-      title: pkgInfo.build.productName,
+      title: APP_NAME,
       message: '✅ 配置保存成功',
       buttons: ['确定']
     })
@@ -152,7 +153,30 @@ ipcMain.handle('save-config-yml', (e, content) => {
   } catch (err) {
     dialog.showMessageBoxSync({
       type: 'error',
-      title: pkgInfo.build.productName,
+      title: APP_NAME,
+      message: `❌ 配置保存失败：${err.message}`,
+      buttons: ['确定']
+    })
+    return { error: err.message }
+  }
+})
+
+/** 保存配置对象（从表单） */
+ipcMain.handle('save-config-obj', (e, config) => {
+  try {
+    const yamlContent = yaml.dump(config, { lineWidth: -1 })
+    fs.writeFileSync(getConfigPath(), yamlContent, 'utf8')
+    dialog.showMessageBoxSync({
+      type: 'info',
+      title: APP_NAME,
+      message: '✅ 配置保存成功',
+      buttons: ['确定']
+    })
+    return { success: true }
+  } catch (err) {
+    dialog.showMessageBoxSync({
+      type: 'error',
+      title: APP_NAME,
       message: `❌ 配置保存失败：${err.message}`,
       buttons: ['确定']
     })
@@ -184,7 +208,7 @@ ipcMain.handle('clear-logs', () => {
     fs.writeFileSync(getLogPath(), '', 'utf8')
     dialog.showMessageBoxSync({
       type: 'info',
-      title: pkgInfo.build.productName,
+      title: APP_NAME,
       message: '✅ 日志已清空',
       buttons: ['确定']
     })
@@ -192,7 +216,7 @@ ipcMain.handle('clear-logs', () => {
   } catch (err) {
     dialog.showMessageBoxSync({
       type: 'error',
-      title: pkgInfo.build.productName,
+      title: APP_NAME,
       message: `❌ 清空日志失败：${err.message}`,
       buttons: ['确定']
     })
@@ -210,7 +234,7 @@ ipcMain.handle('save-image', (e, { filePath, base64Data }) => {
     fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'))
     dialog.showMessageBoxSync({
       type: 'info',
-      title: pkgInfo.build.productName,
+      title: APP_NAME,
       message: '✅ 图片保存成功',
       buttons: ['确定']
     })
@@ -218,7 +242,7 @@ ipcMain.handle('save-image', (e, { filePath, base64Data }) => {
   } catch (err) {
     dialog.showMessageBoxSync({
       type: 'error',
-      title: pkgInfo.build.productName,
+      title: APP_NAME,
       message: `❌ 图片保存失败：${err.message}`,
       buttons: ['确定']
     })

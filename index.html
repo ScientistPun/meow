@@ -148,6 +148,92 @@
     #nextBtn { right: -80px }
 
     /* ======================
+       配置表单样式
+       ====================== */
+    .cfg-section { margin-bottom: 24px; border-bottom: 1px solid #eee; padding-bottom: 16px }
+    .cfg-section:last-child { border-bottom: none; margin-bottom: 0 }
+    .cfg-section h3 {
+      font-size: 14px; color: #666; margin-bottom: 16px;
+      text-transform: uppercase; letter-spacing: 0.5px
+    }
+
+    /* Switch 开关样式 */
+    .switch-line {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px
+    }
+    .switch-line label {
+      margin-bottom: 0;
+      font-weight: 500
+    }
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 50px;
+      height: 28px
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #ccc;
+      transition: .3s;
+      border-radius: 28px
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 22px;
+      width: 22px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .3s;
+      border-radius: 50%
+    }
+    .switch input:checked + .slider {
+      background-color: #007aff
+    }
+    .switch input:checked + .slider:before {
+      transform: translateX(22px)
+    }
+    .switch input:disabled + .slider {
+      background-color: #e0e0e0;
+      cursor: not-allowed
+    }
+
+    .input-with-btn {
+      display: flex; gap: 8px
+    }
+    .input-with-btn input {
+      flex: 1
+    }
+    .btn-browse {
+      padding: 12px 16px; background: #f2f2f2; border: 1px solid #e4e7ed;
+      border-radius: 12px; cursor: pointer; font-size: 14px; white-space: nowrap
+    }
+    .btn-browse:hover:not(:disabled) {
+      background: #e8e8e8
+    }
+    .btn-browse:disabled {
+      background: #f5f5f5;
+      color: #999;
+      cursor: not-allowed
+    }
+    input:disabled {
+      background: #f9f9f9;
+      color: #999;
+      cursor: not-allowed
+    }
+
+    /* ======================
        Markdown 渲染样式
        ====================== */
     .md-view { line-height: 1.7; color: #222 }
@@ -321,10 +407,83 @@
 
 <!-- 配置 -->
 <div class="modal" id="cfgModal">
-  <div class="modal-content">
+  <div class="modal-content" style="max-width: 600px;">
     <div class="modal-header">配置文件</div>
     <div class="modal-body">
-      <textarea style="width:100%;min-height:300px" id="cfgContent"></textarea>
+      <!-- 基本设置 -->
+      <div class="cfg-section">
+        <h3>基本设置</h3>
+        <div class="form-line">
+          <label>API Key</label>
+          <input type="text" id="cfgApiKey" placeholder="输入 API Key">
+        </div>
+        <div class="form-line">
+          <label>Base URL</label>
+          <input type="text" id="cfgBaseUrl" placeholder="API 基础地址">
+        </div>
+        <div class="switch-line">
+          <label>开发模式</label>
+          <label class="switch">
+            <input type="checkbox" id="cfgDevMode">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- 保存设置 -->
+      <div class="cfg-section">
+        <h3>保存设置</h3>
+        <div class="switch-line">
+          <label>自动保存</label>
+          <label class="switch">
+            <input type="checkbox" id="cfgAutoSave">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="form-line">
+          <label>保存目录</label>
+          <div class="input-with-btn">
+            <input type="text" id="cfgSaveDir" placeholder="选择保存目录" readonly disabled>
+            <button id="browseSaveDir" class="btn-browse" disabled>浏览</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 模型配置 -->
+      <div class="cfg-section">
+        <h3>模型配置</h3>
+        <div class="form-line">
+          <label>V5 模型 ID</label>
+          <input type="text" id="cfgModelV5" placeholder="V5 模型 ID">
+        </div>
+        <div class="form-line">
+          <label>V45 模型 ID</label>
+          <input type="text" id="cfgModelV45" placeholder="V45 模型 ID">
+        </div>
+        <div class="form-line">
+          <label>V4 模型 ID</label>
+          <input type="text" id="cfgModelV4" placeholder="V4 模型 ID">
+        </div>
+      </div>
+
+      <!-- 默认设置 -->
+      <div class="cfg-section">
+        <h3>默认设置</h3>
+        <div class="form-line">
+          <label>输出格式</label>
+          <select id="cfgOutputFormat">
+            <option value="png">PNG</option>
+            <option value="jpg">JPG</option>
+          </select>
+        </div>
+        <div class="switch-line">
+          <label>添加水印</label>
+          <label class="switch">
+            <input type="checkbox" id="cfgWatermark">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
     </div>
     <div class="modal-footer">
       <button id="saveCfgBtn" class="btn-primary">保存</button>
@@ -588,14 +747,80 @@ document.getElementById('clearLogBtn').onclick = async () => {
 }
 
 // 配置
+let currentConfig = {}
+
 document.getElementById('openConfig').onclick = async () => {
-  document.getElementById('cfgContent').value = await seedream.getConfigYml()
+  currentConfig = await seedream.loadConfig()
+  fillConfigForm(currentConfig)
   show('cfgModal')
 }
+
 document.getElementById('closeCfgModal').onclick = () => hide('cfgModal')
+
 document.getElementById('saveCfgBtn').onclick = async () => {
-  await seedream.saveConfigYml(document.getElementById('cfgContent').value)
-  hide('cfgModal')
+  const config = collectConfigForm()
+  const result = await seedream.saveConfigObj(config)
+  if (result.success) {
+    hide('cfgModal')
+    currentConfig = config
+  }
+}
+
+// 自动保存开关控制保存目录
+const autoSaveSwitch = document.getElementById('cfgAutoSave')
+const saveDirInput = document.getElementById('cfgSaveDir')
+const browseBtn = document.getElementById('browseSaveDir')
+
+autoSaveSwitch.addEventListener('change', (e) => {
+  saveDirInput.disabled = !e.target.checked
+  browseBtn.disabled = !e.target.checked
+})
+
+// 浏览保存目录
+document.getElementById('browseSaveDir').onclick = async () => {
+  const result = await seedream.openDirectory()
+  if (!result.canceled && result.filePaths?.length > 0) {
+    document.getElementById('cfgSaveDir').value = result.filePaths[0]
+  }
+}
+
+/** 填充配置表单 */
+function fillConfigForm(cfg) {
+  document.getElementById('cfgApiKey').value = cfg.api_key || ''
+  document.getElementById('cfgBaseUrl').value = cfg.base_url || ''
+  document.getElementById('cfgDevMode').checked = cfg.dev_mode || false
+  document.getElementById('cfgAutoSave').checked = cfg.auto_save || false
+  document.getElementById('cfgSaveDir').value = cfg.save_dir || ''
+  document.getElementById('cfgModelV5').value = cfg.models?.v5 || ''
+  document.getElementById('cfgModelV45').value = cfg.models?.v45 || ''
+  document.getElementById('cfgModelV4').value = cfg.models?.v4 || ''
+  document.getElementById('cfgOutputFormat').value = cfg.default?.output_format || 'png'
+  document.getElementById('cfgWatermark').checked = cfg.default?.watermark || false
+
+  // 根据自动保存状态设置保存目录的禁用状态
+  const autoSaveEnabled = cfg.auto_save || false
+  saveDirInput.disabled = !autoSaveEnabled
+  browseBtn.disabled = !autoSaveEnabled
+}
+
+/** 收集配置表单数据 */
+function collectConfigForm() {
+  return {
+    api_key: document.getElementById('cfgApiKey').value.trim(),
+    base_url: document.getElementById('cfgBaseUrl').value.trim(),
+    dev_mode: document.getElementById('cfgDevMode').checked,
+    auto_save: document.getElementById('cfgAutoSave').checked,
+    save_dir: document.getElementById('cfgSaveDir').value.trim(),
+    models: {
+      v5: document.getElementById('cfgModelV5').value.trim(),
+      v45: document.getElementById('cfgModelV45').value.trim(),
+      v4: document.getElementById('cfgModelV4').value.trim()
+    },
+    default: {
+      output_format: document.getElementById('cfgOutputFormat').value,
+      watermark: document.getElementById('cfgWatermark').checked
+    }
+  }
 }
 
 // 说明文档

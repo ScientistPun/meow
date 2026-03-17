@@ -1,12 +1,12 @@
 api_key: 567ac74d-92e2-483a-8ba7-e366a8fe7bea
-dev_mode: true
 base_url: https://ark.cn-beijing.volces.com/api/v3/images/generations
+dev_mode: true
 auto_save: true
 save_dir: /Users/koali/Desktop/output
 models:
   v5: doubao-seedream-5-0-260128
-  v45: doubao-seedream-4-5-251128
+  v45: doubao-seedream-4-5-251126
   v4: doubao-seedream-4-0-250828
 default:
-  output_format: png
+  output_format: jpg
   watermark: false
