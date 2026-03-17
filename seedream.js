@@ -2,6 +2,15 @@ const fs = require('fs')
 const path = require('path')
 const yaml = require('js-yaml')
 const axios = require('axios')
+const packageInfo = require('./package.json') // 引入package.json配置（注意：生产环境可通过构建工具抽离版本，避免读取整个文件）
+
+// 定义版本信息常量（方便项目内复用）
+const VERSION = packageInfo.version
+const AUTHOR_INFO = {
+  name: packageInfo.author.name,
+  email: packageInfo.author.email,
+  repo: packageInfo.repository.url
+};
 
 function loadConfig() {
   const configPath = path.join(__dirname, 'config.yml')
@@ -112,6 +121,9 @@ async function generateImage(opts) {
   reloadConfig()
   const { modelKey, mode, prompt, imageUrls = [], size, strength = 0.7, outputDir } = opts
 
+  if (!API_KEY) return { error: 'api_key错误' }
+  if (!BASE_URL) return { error: 'base_url地址错误' }
+
   const model = MODELS[modelKey]
   if (!model) return { error: '不支持的模型' }
   if (!prompt) return { error: '请输入提示词' }
@@ -176,4 +188,10 @@ function clearLogs() {
   }
 }
 
-module.exports = { generateImage, clearLogs, writeLog, getSaveImgPrefix }
+module.exports = { 
+  VERSION,
+  AUTHOR_INFO,
+  generateImage, 
+  clearLogs, 
+  writeLog, 
+  getSaveImgPrefix }

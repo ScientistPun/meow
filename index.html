@@ -194,6 +194,40 @@
       color: #007aff;
       text-decoration: none;
     }
+
+    /* 新增：版本信息栏样式 */
+    #version-footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background: #fff;
+      border-top: 1px solid #e4e7ed;
+      padding: 12px 25px;
+      font-size: 13px;
+      color: #666;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 -2px 8px rgba(0,0,0,0.02);
+      z-index: 999;
+    }
+    #version-footer .left-info {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    #version-footer .version {
+      color: #007aff;
+      font-weight: 600;
+    }
+    #version-footer a {
+      color: #007aff;
+      text-decoration: none;
+    }
+    .version-footer a:hover {
+      text-decoration: underline;
+    }
   </style>
 </head>
 
@@ -277,6 +311,9 @@
   </div>
 </div>
 
+<!-- 新增：底部版本信息栏 -->
+<div id="version-footer"> </div>
+
 <!-- 图片预览弹窗 -->
 <div class="modal" id="previewModal">
   <div class="preview-container">
@@ -349,6 +386,13 @@ const seedream = require('./seedream.js')
 const fs = require('fs')
 const path = require('path')
 
+document.getElementById('version-footer').innerHTML = `<div class="left-info"> <span>Seedream Tools <span class="version">v${seedream.VERSION}</span></span>
+    <span>👨‍🔬 ${seedream.AUTHOR_INFO.name} ${seedream.AUTHOR_INFO.email} &copy; 2026 All Rights Reserved</span>
+  </div>
+  <div class="right-info">
+    <a href="${seedream.AUTHOR_INFO.repo}t" target="_blank">📦 GitHub</a>
+  </div>`
+
 let currentImageList = []
 let currentPreviewIndex = 0
 
@@ -394,7 +438,7 @@ generateBtn.onclick = async () => {
       autoSave: false
     })
 
-    if (!res.success) throw new Error('生成失败')
+    if (!res.success) throw new Error(res.error)
     currentImageList = res.base64List
     resultBox.innerText = `✅ 成功生成 ${res.base64List.length} 张图片`
 
@@ -414,6 +458,7 @@ generateBtn.onclick = async () => {
     resultBox.innerText = '❌ 错误：' + e.message
   }
   generateBtn.disabled = false
+  generateBtn.innerHTML = '🚀 开始生成'
 }
 
 // ======================
