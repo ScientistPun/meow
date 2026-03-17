@@ -27,7 +27,7 @@ ipcMain.handle('get-path', () => {
 
 ipcMain.handle('save-file', (e, param) => {
   const dir = app.isPackaged ? app.getPath('userData'):__dirname
-  console.log(path)
+  console.log('path', path)
   const target = path.join(dir, param.filename)
   try {
     fs.writeFileSync(target, param.content, 'utf-8')
