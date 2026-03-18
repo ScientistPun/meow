@@ -13,6 +13,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 const api = {
   // 应用信息
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),
+  checkUpdate: () => ipcRenderer.invoke('check-update'),
 
   // 配置管理
   loadConfig: () => ipcRenderer.invoke('load-config'),
@@ -28,16 +29,42 @@ const api = {
   // 文档
   getReadme: () => ipcRenderer.invoke('get-readme'),
 
+  // 提词库
+  loadPrompts: () => ipcRenderer.invoke('load-prompts'),
+  savePrompts: (prompts) => ipcRenderer.invoke('save-prompts', prompts),
+  migratePromptsFromLocalStorage: (prompts) => ipcRenderer.invoke('migrate-prompts-from-localStorage', prompts),
+
   // 图片生成与保存
   generateImage: (opts) => ipcRenderer.invoke('generate-image', opts),
   saveImage: (filePath, base64Data) => ipcRenderer.invoke('save-image', { filePath, base64Data }),
 
   // 文件系统
   openDirectory: () => ipcRenderer.invoke('open-directory'),
+  showInputBox: (opts) => ipcRenderer.invoke('show-input-box', opts),
 
   // 应用控制
   send: (channel, ...args) => ipcRenderer.send(channel, ...args),
+
+  // 剪贴板和系统操作
+  copyToClipboard: (text) => ipcRenderer.invoke('copy-to-clipboard', text),
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
 }
 
 // 暴露 API 到 window.electronAPI
 contextBridge.exposeInMainWorld('electronAPI', api)
+
+// 监听输入对话框事件
+ipcRenderer.on('show-input-dialog', (e, data) => {
+  const { dialogId, title, defaultValue, placeholder } = data
+
+  // 触发前端显示输入弹窗，使用 CustomEvent 传递数据
+  const event = new CustomEvent('show-input-dialog', {
+    detail: { dialogId, title, defaultValue, placeholder }
+  })
+  document.dispatchEvent(event)
+})
+
+// 发送输入对话框结果回主进程
+contextBridge.exposeInMainWorld('returnInputDialogResult', (dialogId, result) => {
+  ipcRenderer.send('input-dialog-result-' + dialogId, result)
+})

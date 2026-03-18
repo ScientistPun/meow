@@ -1,15 +1,15 @@
 /**
- * Seedream Tools - 主进程
+ * Meow - 主进程
  * 负责窗口管理、IPC通信、文件操作和API请求
  */
 
-const { app, BrowserWindow, ipcMain, dialog, globalShortcut } = require('electron')
+const { app, BrowserWindow, ipcMain, ipcRenderer, dialog, globalShortcut, clipboard, shell } = require('electron')
 const pkgInfo = require('./package.json')
 const fs = require('fs')
 const path = require('path')
 const yaml = require('js-yaml')
 const axios = require('axios')
-const APP_NAME = 'Seedream Tools'
+const APP_NAME = 'Meow'
 
 let mainWindow
 
@@ -19,9 +19,9 @@ let mainWindow
 
 /** 默认配置文件内容 */
 const DEFAULT_CONFIG = `api_key: ""
-dev_mode: true
+dev_mode: false
 base_url: https://ark.cn-beijing.volces.com/api/v3/images/generations
-auto_save: true
+auto_save: false
 save_dir:
 models:
   v5: doubao-seedream-5-0-260128
@@ -34,6 +34,12 @@ default:
 
 /** README 文件路径 */
 const README_PATH = path.join(__dirname, 'readme.md')
+
+/** 提词库文件路径 */
+const PROMPTS_PATH = () => {
+  const userPath = app.isPackaged ? app.getPath('userData') : __dirname
+  return path.join(userPath, 'prompts.json')
+}
 
 // ======================
 // 工具函数
@@ -58,14 +64,50 @@ function getLogPath() {
 }
 
 /**
- * 生成图片文件名前缀 (格式: seedream_YYMMDDHHMMSS_)
- * @returns {string} 时间戳前缀
+ * 解析文件名前缀中的日期占位符
+ * 支持: %yyyy(四位年), %yy(两位年), %mm(月), %dd(日), %HH(时), %MM(分), %SS(秒)
+ * @param {string} prefix - 包含占位符的文件名前缀
+ * @returns {string} 解析后的文件名
  */
-function getSaveImgPrefix() {
+function parseDatePrefix(prefix) {
+  if (!prefix) return getDefaultPrefix()
+
+  const now = new Date()
+  const pad = (n, len = 2) => n.toString().padStart(len, '0')
+  const year = now.getFullYear()
+  const year2 = year.toString().slice(2)
+
+  return prefix
+    .replace(/%yyyy/g, year)
+    .replace(/%yy/g, year2)
+    .replace(/%mm/g, pad(now.getMonth() + 1))
+    .replace(/%dd/g, pad(now.getDate()))
+    .replace(/%HH/g, pad(now.getHours()))
+    .replace(/%MM/g, pad(now.getMinutes()))
+    .replace(/%SS/g, pad(now.getSeconds()))
+}
+
+/**
+ * 获取默认的文件名前缀
+ * @returns {string} 默认前缀
+ */
+function getDefaultPrefix() {
   const now = new Date()
   const pad = (n) => n.toString().padStart(2, '0')
   const year = now.getFullYear().toString().slice(2)
-  return `seedream_${year}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}_`
+  return `${pkgInfo.name}_${year}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}_`
+}
+
+/**
+ * 生成图片文件名前缀
+ * @param {string} customPrefix - 自定义前缀（可选，支持日期占位符）
+ * @returns {string} 文件名前缀
+ */
+function getSaveImgPrefix(customPrefix) {
+  if (customPrefix) {
+    return parseDatePrefix(customPrefix)
+  }
+  return getDefaultPrefix()
 }
 
 /**
@@ -116,10 +158,61 @@ async function createWindow() {
 
 /** 获取应用信息 */
 ipcMain.handle('get-app-info', () => ({
+  name: pkgInfo.name,
   version: pkgInfo.version,
   author: pkgInfo.author,
   repository: pkgInfo.repository
 }))
+
+/** 检查版本更新 */
+ipcMain.handle('check-update', async () => {
+  try {
+    const owner = 'ScientistPun'
+    const repo = 'seedreem-tool'
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/releases/latest`
+
+    const res = await axios.get(apiUrl, {
+      timeout: 10000,
+      headers: { 'Accept': 'application/vnd.github.v3+json' }
+    })
+
+    const latest = res.data
+    const latestVersion = latest.tag_name?.replace(/^v/, '') || latest.name?.replace(/^v/, '')
+    const currentVersion = pkgInfo.version
+
+    // 比较版本号
+    const hasUpdate = compareVersion(latestVersion, currentVersion) > 0
+
+    return {
+      hasUpdate,
+      currentVersion,
+      latestVersion,
+      releaseUrl: latest.html_url,
+      releaseNotes: latest.body || '暂无更新说明',
+      publishedAt: latest.published_at
+    }
+  } catch (err) {
+    return { error: err.message }
+  }
+})
+
+/**
+ * 比较版本号
+ * @returns {number} 1: v1>v2, 0: v1=v2, -1: v1<v2
+ */
+function compareVersion(v1, v2) {
+  const parts1 = v1.split('.').map(Number)
+  const parts2 = v2.split('.').map(Number)
+  const len = Math.max(parts1.length, parts2.length)
+
+  for (let i = 0; i < len; i++) {
+    const a = parts1[i] || 0
+    const b = parts2[i] || 0
+    if (a > b) return 1
+    if (a < b) return -1
+  }
+  return 0
+}
 
 /** 加载配置 */
 ipcMain.handle('load-config', () => {
@@ -143,13 +236,7 @@ ipcMain.handle('get-config-yml', () => {
 ipcMain.handle('save-config-yml', (e, content) => {
   try {
     fs.writeFileSync(getConfigPath(), content, 'utf8')
-    dialog.showMessageBoxSync({
-      type: 'info',
-      title: APP_NAME,
-      message: '✅ 配置保存成功',
-      buttons: ['确定']
-    })
-    return { success: true }
+    return { success: true, message: '✅ 配置保存成功' }
   } catch (err) {
     dialog.showMessageBoxSync({
       type: 'error',
@@ -164,15 +251,16 @@ ipcMain.handle('save-config-yml', (e, content) => {
 /** 保存配置对象（从表单） */
 ipcMain.handle('save-config-obj', (e, config) => {
   try {
-    const yamlContent = yaml.dump(config, { lineWidth: -1 })
+    // 确保 default 对象存在且有 output_format
+    if (!config.default) {
+      config.default = {}
+    }
+    if (!config.default.output_format || config.default.output_format.trim() === '') {
+      config.default.output_format = 'png'
+    }
+    const yamlContent = yaml.dump(config, { lineWidth: -1, quotingType: '"' })
     fs.writeFileSync(getConfigPath(), yamlContent, 'utf8')
-    dialog.showMessageBoxSync({
-      type: 'info',
-      title: APP_NAME,
-      message: '✅ 配置保存成功',
-      buttons: ['确定']
-    })
-    return { success: true }
+    return { success: true, message: '✅ 配置保存成功' }
   } catch (err) {
     dialog.showMessageBoxSync({
       type: 'error',
@@ -186,8 +274,48 @@ ipcMain.handle('save-config-obj', (e, config) => {
 
 /** 获取说明文档 */
 ipcMain.handle('get-readme', () => {
-  if (!fs.existsSync(README_PATH)) return '# Seedream 图像生成工具'
+  if (!fs.existsSync(README_PATH)) return '# Meow 图像生成工具'
   return fs.readFileSync(README_PATH, 'utf8')
+})
+
+/** 加载提词库（支持从 localStorage 迁移） */
+ipcMain.handle('load-prompts', () => {
+  const promptsPath = PROMPTS_PATH()
+  const isPackaged = app.isPackaged
+
+  // 如果文件已存在，直接读取
+  if (fs.existsSync(promptsPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(promptsPath, 'utf8'))
+    } catch {
+      return []
+    }
+  }
+
+  // 打包环境下，检查是否需要从 localStorage 迁移（通过 webContents 请求）
+  // 这里返回空数组，实际迁移在渲染进程完成
+  return []
+})
+
+/** 从 localStorage 迁移提词库到文件 */
+ipcMain.handle('migrate-prompts-from-localStorage', (e, localStoragePrompts) => {
+  try {
+    const promptsPath = PROMPTS_PATH()
+    fs.writeFileSync(promptsPath, JSON.stringify(localStoragePrompts, null, 2), 'utf8')
+    return { success: true }
+  } catch (err) {
+    return { error: err.message }
+  }
+})
+
+/** 保存提词库 */
+ipcMain.handle('save-prompts', (e, prompts) => {
+  try {
+    fs.writeFileSync(PROMPTS_PATH(), JSON.stringify(prompts, null, 2), 'utf8')
+    return { success: true }
+  } catch (err) {
+    return { error: err.message }
+  }
 })
 
 /** 获取日志内容 */
@@ -206,13 +334,7 @@ ipcMain.handle('write-log', (e, message) => {
 ipcMain.handle('clear-logs', () => {
   try {
     fs.writeFileSync(getLogPath(), '', 'utf8')
-    dialog.showMessageBoxSync({
-      type: 'info',
-      title: APP_NAME,
-      message: '✅ 日志已清空',
-      buttons: ['确定']
-    })
-    return { success: true }
+    return { success: true, message: '✅ 日志已清空' }
   } catch (err) {
     dialog.showMessageBoxSync({
       type: 'error',
@@ -232,13 +354,7 @@ ipcMain.handle('save-image', (e, { filePath, base64Data }) => {
       fs.mkdirSync(dir, { recursive: true })
     }
     fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'))
-    dialog.showMessageBoxSync({
-      type: 'info',
-      title: APP_NAME,
-      message: '✅ 图片保存成功',
-      buttons: ['确定']
-    })
-    return { success: true }
+    return { success: true, message: '✅ 图片保存成功' }
   } catch (err) {
     dialog.showMessageBoxSync({
       type: 'error',
@@ -329,7 +445,7 @@ ipcMain.handle('generate-image', async (e, opts) => {
     // 自动保存图片
     const savedPaths = []
     if (cfg.auto_save && cfg.save_dir && dataList.length > 0) {
-      const imgPrefix = getSaveImgPrefix()
+      const imgPrefix = getSaveImgPrefix(cfg.save_prefix)
       const outputDir = cfg.save_dir.replace(/^~/, process.env.HOME)
       if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true })
 
@@ -346,14 +462,54 @@ ipcMain.handle('generate-image', async (e, opts) => {
 
     return { success: true, base64List, savedPaths, usage }
   } catch (e) {
-    const err = `请求失败：${e.message}`
+    // 获取 requestId
+    let requestId = ''
+    if (e.response?.data) {
+      requestId = e.response.data.request_id || e.response.data.requestId || ''
+      // 无论是否开启调试模式，都保存完整响应
+      appendLog(`📝 错误响应: ${JSON.stringify(e.response.data)}`, true)
+    }
+    const err = `请求失败：${e.message}${requestId ? ` (requestId: ${requestId})` : ''}`
     appendLog(`❌ ${err}`, true)
-    return { error: err }
+    return { error: err, requestId }
   }
 })
 
 /** 打开目录选择对话框 */
-ipcMain.handle('open-directory', () => dialog.showOpenDialog({ properties: ['openDirectory'] }))
+ipcMain.handle('open-directory', (e) => {
+  const win = BrowserWindow.fromWebContents(e.sender)
+  return dialog.showOpenDialog(win, { properties: ['openDirectory'] })
+})
+
+/** 弹出输入框对话框 */
+ipcMain.handle('show-input-box', async (event, { title, defaultValue, placeholder }) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  return new Promise((resolve) => {
+    const dialogId = 'input-' + Date.now()
+    win.webContents.send('show-input-dialog', { dialogId, title, defaultValue, placeholder })
+
+    // 监听渲染进程返回的结果
+    ipcMain.once('input-dialog-result-' + dialogId, (e, result) => {
+      resolve(result)
+    })
+  })
+})
+
+/** 复制到剪贴板 */
+ipcMain.handle('copy-to-clipboard', (e, text) => {
+  clipboard.writeText(text)
+  return { success: true }
+})
+
+/** 在默认浏览器中打开外部链接 */
+ipcMain.handle('open-external', async (e, url) => {
+  try {
+    await shell.openExternal(url)
+    return { success: true }
+  } catch (err) {
+    return { error: err.message }
+  }
+})
 
 /** 退出应用 */
 ipcMain.on('appExit', () => app.quit())

@@ -1,16 +1,16 @@
 {
-  "name": "seedream-tools",
-  "description": "seedreem-tools",
+  "name": "meow",
+  "description": "Meow AI Image Generator",
   "version": "1.4.0",
   "main": "main.js",
   "author": {
     "name": "偉大嘎科學家",
     "email": "scientistpun@gmail.com",
-    "url": "https://github.com/ScientistPun/seedreem-tool.git"
+    "url": "https://github.com/ScientistPun/meow-tool.git"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/ScientistPun/seedreem-tool.git"
+    "url": "https://github.com/ScientistPun/meow-tool.git"
   },
   "scripts": {
     "start": "electron .",
@@ -22,8 +22,8 @@
     "electron-builder": "^24.9.1"
   },
   "build": {
-    "appId": "com.seedream.tools",
-    "productName": "Seedream Tools",
+    "appId": "com.scientistpun.meow",
+    "productName": "Meow",
     "win": {
       "icon": "logo.ico",
       "target": "nsis"
@@ -33,8 +33,8 @@
       "category": "public.app-category.graphics-design"
     },
     "nsis": {
-      "shortcutName": "Seedream Tools",
-      "uninstallDisplayName": "Seedream Tools"
+      "shortcutName": "Meow",
+      "uninstallDisplayName": "Meow"
     }
   },
   "dependencies": {
