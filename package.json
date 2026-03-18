@@ -1,7 +1,7 @@
 {
   "name": "meow",
   "description": "Meow AI Image Generator",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "main": "main.js",
   "author": {
     "name": "偉大嘎科學家",
