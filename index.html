@@ -971,7 +971,12 @@ const loadPrompts = async () => {
 }
 
 // 提示词弹窗事件
-document.getElementById('addPromptBtn').onclick = () => show('promptModal')
+document.getElementById('addPromptBtn').onclick = () => {
+  document.getElementById('modalTitle').value = ''
+  document.getElementById('modalDesc').value = ''
+  document.getElementById('modalContent').value = ''
+  show('promptModal')
+}
 document.getElementById('cancelModalBtn').onclick = () => hide('promptModal')
 document.getElementById('savePromptModalBtn').onclick = async () => {
   const title = document.getElementById('modalTitle').value.trim()

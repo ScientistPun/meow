@@ -119,22 +119,6 @@ function compareVersion(v1, v2) {
   return 0
 }
 
-function saveDebugResponse(resData, isError = false) {
-  const cfg = getConfig()
-  if (!cfg.dev_mode) return
-
-  const debugDir = path.join(path.dirname(getLogPath()), 'debug')
-  if (!fs.existsSync(debugDir)) {
-    fs.mkdirSync(debugDir, { recursive: true })
-  }
-
-  const timestamp = getTimestamp().replace(/[: ]/g, '-')
-  const prefix = isError ? 'error' : 'response'
-  const filePath = path.join(debugDir, `${prefix}_${timestamp}.txt`)
-  fs.writeFileSync(filePath, resData, 'utf8')
-  appendLog(`📁 调试响应已保存: ${filePath}`, true)
-}
-
 // ======================
 // 窗口管理
 // ======================
@@ -393,7 +377,9 @@ ipcMain.handle('generate-image', async (e, opts) => {
     }
 
     // 调试模式保存响应结果
-    saveDebugResponse(res.data)
+    if (cfg.dev_mode) {
+      appendLog(`📝 响应结果: ${JSON.stringify(res.data)}`, true)
+    }
 
     // 自动保存图片
     const savedPaths = []
