@@ -110,3 +110,6 @@ web/node_modules/
 window/node_modules/
 *.log
 package_lock.json
+
+# Config files (contain sensitive API keys)
+config.json

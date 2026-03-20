@@ -7,7 +7,6 @@ const { app, BrowserWindow, ipcMain, dialog, globalShortcut, clipboard, shell } 
 const pkgInfo = require('./package.json')
 const fs = require('fs')
 const path = require('path')
-const yaml = require('js-yaml')
 const axios = require('axios')
 
 const APP_NAME = 'Meow'
@@ -17,41 +16,38 @@ let mainWindow
 // 常量配置
 // ======================
 
-const DEFAULT_CONFIG = `dev_mode: false
+// 默认配置对象（用于补充缺失字段）
+const DEFAULT_CONFIG_OBJ = {
+  dev_mode: false,
+  save_setting: {
+    auto: false,
+    dir: "",
+    format: "png",
+    prefix: ""
+  },
+  preferred_model: "minimax.v1_live",
+  volces: {
+    api_key: "",
+    base_url: "https://ark.cn-beijing.volces.com/api/v3/images/generations",
+    models: {
+      v5: "doubao-seedream-5-0-260128",
+      v45: "doubao-seedream-4-5-251126",
+      v4: "doubao-seedream-4-0-250828"
+    },
+    watermark: false
+  },
+  minimax: {
+    api_key: "",
+    base_url: "https://api.minimaxi.com/v1/image_generation",
+    models: {
+      v1: "image-01",
+      v1_live: "image-01-live"
+    },
+    prompt_optimizer: false,
+    aigc_watermark: false
+  }
+}
 
-#保存
-save_setting:
-  auto: false
-  dir: ""
-  format: png
-  prefix: ""
-
-# 首选模型 (格式: "供应商.模型")
-preferred_model: minimax.v1_live
-
-# 火山引擎
-volces:
-  api_key: ""
-  base_url: https://ark.cn-beijing.volces.com/api/v3/images/generations
-  models:
-    v5: doubao-seedream-5-0-260128
-    v45: doubao-seedream-4-5-251126
-    v4: doubao-seedream-4-0-250828
-
-#其他
-other:
-  watermark: false
-
-# minimax
-minimax:
-  api_key: ""
-  base_url: https://api.minimaxi.com/v1/image_generation
-  models:
-    v1: image-01
-    v1_live: image-01-live
-  prompt_optimizer: false
-  aigc_watermark: false
-`
 
 const README_PATH = path.join(__dirname, 'readme.md')
 const MODEL_SIZES_PATH = path.join(__dirname, 'model-sizes.json')
@@ -62,15 +58,44 @@ const MODEL_SIZES_PATH = path.join(__dirname, 'model-sizes.json')
 
 let cachedConfig = null
 
+// 深度合并配置（用户配置 + 默认配置，缺失字段用默认值补充）
+function mergeConfig(userConfig, defaultConfig) {
+  const result = {}
+  for (const key of Object.keys(defaultConfig)) {
+    if (userConfig && userConfig.hasOwnProperty(key)) {
+      if (typeof defaultConfig[key] === 'object' && defaultConfig[key] !== null && !Array.isArray(defaultConfig[key])) {
+        result[key] = mergeConfig(userConfig[key], defaultConfig[key])
+      } else {
+        result[key] = userConfig[key]
+      }
+    } else {
+      result[key] = defaultConfig[key]
+    }
+  }
+  // 保留用户配置中默认配置没有的字段
+  if (userConfig) {
+    for (const key of Object.keys(userConfig)) {
+      if (!result.hasOwnProperty(key)) {
+        result[key] = userConfig[key]
+      }
+    }
+  }
+  return result
+}
+
 function getConfig() {
   if (!cachedConfig) {
-    cachedConfig = yaml.load(fs.readFileSync(getConfigPath(), 'utf8'))
+    const configPath = getConfigPath()
+    const userConfig = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : null
+    cachedConfig = mergeConfig(userConfig, DEFAULT_CONFIG_OBJ)
   }
   return cachedConfig
 }
 
 function refreshConfig() {
-  cachedConfig = yaml.load(fs.readFileSync(getConfigPath(), 'utf8'))
+  const configPath = getConfigPath()
+  const userConfig = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : null
+  cachedConfig = mergeConfig(userConfig, DEFAULT_CONFIG_OBJ)
 }
 
 // ======================
@@ -79,7 +104,33 @@ function refreshConfig() {
 
 function getConfigPath() {
   const userPath = app.isPackaged ? app.getPath('userData') : __dirname
-  return path.join(userPath, 'config.yml')
+  return path.join(userPath, 'config.json')
+}
+
+// 初始化配置文件（如果不存在则创建默认配置）
+function initConfig() {
+  const configPath = getConfigPath()
+
+  if (!fs.existsSync(configPath)) {
+    // config.json 不存在，创建默认配置
+    fs.writeFileSync(configPath, JSON.stringify(DEFAULT_CONFIG_OBJ, null, 2), 'utf8')
+    appendLog('✅ 已创建默认配置文件 config.json，请在界面中填入 API Key', true)
+  } else {
+    // config.json 存在，检查结构是否完整
+    try {
+      const userConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+      const merged = mergeConfig(userConfig, DEFAULT_CONFIG_OBJ)
+
+      // 如果合并后的配置比用户配置多了字段，说明有新增的配置项
+      const hasNewFields = Object.keys(merged).some(key => !userConfig.hasOwnProperty(key))
+      if (hasNewFields) {
+        fs.writeFileSync(configPath, JSON.stringify(merged, null, 2), 'utf8')
+        appendLog('✅ 已同步新配置项到 config.json', true)
+      }
+    } catch (err) {
+      appendLog(`⚠️ 解析 config.json 失败: ${err.message}，将使用默认配置`, true)
+    }
+  }
 }
 
 function getLogPath() {
@@ -209,10 +260,7 @@ ipcMain.handle('check-update', async () => {
 // ======================
 
 ipcMain.handle('load-config', () => {
-  const configPath = getConfigPath()
-  if (!fs.existsSync(configPath)) {
-    fs.writeFileSync(configPath, DEFAULT_CONFIG, 'utf8')
-  }
+  initConfig()
   return getConfig()
 })
 
@@ -227,16 +275,18 @@ ipcMain.handle('load-model-sizes', () => {
   return null
 })
 
-ipcMain.handle('get-config-yml', () => {
+ipcMain.handle('get-config-json', () => {
   const configPath = getConfigPath()
   if (!fs.existsSync(configPath)) {
-    fs.writeFileSync(configPath, DEFAULT_CONFIG, 'utf8')
+    fs.writeFileSync(configPath, JSON.stringify(DEFAULT_CONFIG_OBJ, null, 2), 'utf8')
   }
   return fs.readFileSync(configPath, 'utf8')
 })
 
-ipcMain.handle('save-config-yml', (e, content) => {
+ipcMain.handle('save-config-json', (_, content) => {
   try {
+    // 验证是否为有效的 JSON
+    JSON.parse(content)
     fs.writeFileSync(getConfigPath(), content, 'utf8')
     refreshConfig()
     return { success: true, message: '✅ 配置保存成功' }
@@ -257,8 +307,7 @@ ipcMain.handle('save-config-obj', (e, config) => {
     if (!config.save_setting.format || config.save_setting.format.trim() === '') {
       config.save_setting.format = 'png'
     }
-    const yamlContent = yaml.dump(config, { lineWidth: -1, quotingType: '"' })
-    fs.writeFileSync(getConfigPath(), yamlContent, 'utf8')
+    fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2), 'utf8')
     refreshConfig()
     return { success: true, message: '✅ 配置保存成功' }
   } catch (err) {
@@ -665,6 +714,7 @@ ipcMain.on('appExit', () => app.quit())
 // ======================
 
 app.whenReady().then(() => {
+  initConfig()
   createWindow()
   globalShortcut.register('F12', () => mainWindow?.webContents.toggleDevTools())
 })

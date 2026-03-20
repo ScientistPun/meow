@@ -26,8 +26,8 @@ const api = {
   // 配置管理
   loadConfig: () => ipcRenderer.invoke('load-config'),
   loadModelSizes: () => ipcRenderer.invoke('load-model-sizes'),
-  getConfigYml: () => ipcRenderer.invoke('get-config-yml'),
-  saveConfigYml: (content) => ipcRenderer.invoke('save-config-yml', content),
+  getConfigJson: () => ipcRenderer.invoke('get-config-json'),
+  saveConfigJson: (content) => ipcRenderer.invoke('save-config-json', content),
   saveConfigObj: (config) => ipcRenderer.invoke('save-config-obj', config),
 
   // 日志管理
