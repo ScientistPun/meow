@@ -1,16 +1,16 @@
 {
   "name": "meow",
   "description": "Meow AI Image Generator",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "main": "main.js",
   "author": {
     "name": "偉大嘎科學家",
     "email": "scientistpun@gmail.com",
-    "url": "https://github.com/ScientistPun/meow-tool.git"
+    "url": "https://github.com/ScientistPun/meow.git"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/ScientistPun/meow-tool.git"
+    "url": "https://github.com/ScientistPun/meow.git"
   },
   "scripts": {
     "start": "electron .",

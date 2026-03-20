@@ -700,7 +700,8 @@ ipcMain.handle('download-update', async (_, { url, filename }) => {
     const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 300000 })
     const downloadPath = path.join(app.getPath('temp'), filename)
     fs.writeFileSync(downloadPath, res.data)
-    shell.showItemInFolder(downloadPath)
+    // 自动打开安装包（macOS 直接挂载 dmg，Windows 打开 exe）
+    await shell.openPath(downloadPath)
     return { success: true, path: downloadPath }
   } catch (err) {
     return { error: err.message }
