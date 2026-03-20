@@ -25,6 +25,7 @@ const api = {
 
   // 配置管理
   loadConfig: () => ipcRenderer.invoke('load-config'),
+  loadModelSizes: () => ipcRenderer.invoke('load-model-sizes'),
   getConfigYml: () => ipcRenderer.invoke('get-config-yml'),
   saveConfigYml: (content) => ipcRenderer.invoke('save-config-yml', content),
   saveConfigObj: (config) => ipcRenderer.invoke('save-config-obj', config),
@@ -43,7 +44,8 @@ const api = {
   migratePromptsFromLocalStorage: (prompts) => ipcRenderer.invoke('migrate-prompts-from-localStorage', prompts),
 
   // 图片生成与保存
-  generateImage: (opts) => ipcRenderer.invoke('generate-image', opts),
+  generateImageVolces: (opts) => ipcRenderer.invoke('generate-image-volces', opts),
+  generateImageMinimax: (opts) => ipcRenderer.invoke('generate-image-minimax', opts),
   saveImage: (filePath, base64Data) => ipcRenderer.invoke('save-image', { filePath, base64Data }),
 
   // 文件系统
@@ -56,6 +58,7 @@ const api = {
   // 剪贴板和系统操作
   copyToClipboard: (text) => ipcRenderer.invoke('copy-to-clipboard', text),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  downloadUpdate: (opts) => ipcRenderer.invoke('download-update', opts),
 }
 
 // 暴露 API 到 window.electronAPI

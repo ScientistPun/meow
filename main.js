@@ -17,21 +17,44 @@ let mainWindow
 // 常量配置
 // ======================
 
-const DEFAULT_CONFIG = `api_key: ""
-dev_mode: false
-base_url: https://ark.cn-beijing.volces.com/api/v3/images/generations
-auto_save: false
-save_dir:
-models:
-  v5: doubao-seedream-5-0-260128
-  v45: doubao-seedream-4-5-251128
-  v4: doubao-seedream-4-0-250828
-default:
-  output_format: png
+const DEFAULT_CONFIG = `dev_mode: false
+
+#保存
+save_setting:
+  auto: false
+  dir: ""
+  format: png
+  prefix: ""
+
+# 首选模型 (格式: "供应商.模型")
+preferred_model: minimax.v1_live
+
+# 火山引擎
+volces:
+  api_key: ""
+  base_url: https://ark.cn-beijing.volces.com/api/v3/images/generations
+  models:
+    v5: doubao-seedream-5-0-260128
+    v45: doubao-seedream-4-5-251126
+    v4: doubao-seedream-4-0-250828
+
+#其他
+other:
   watermark: false
+
+# minimax
+minimax:
+  api_key: ""
+  base_url: https://api.minimaxi.com/v1/image_generation
+  models:
+    v1: image-01
+    v1_live: image-01-live
+  prompt_optimizer: false
+  aigc_watermark: false
 `
 
 const README_PATH = path.join(__dirname, 'readme.md')
+const MODEL_SIZES_PATH = path.join(__dirname, 'model-sizes.json')
 
 // ======================
 // 配置缓存
@@ -161,13 +184,20 @@ ipcMain.handle('check-update', async () => {
     const latestVersion = latest.tag_name?.replace(/^v/, '') || latest.name?.replace(/^v/, '')
     const hasUpdate = compareVersion(latestVersion, pkgInfo.version) > 0
 
+    // 获取 assets 中的下载链接
+    const assets = latest.assets?.map(asset => ({
+      name: asset.name,
+      downloadUrl: asset.browser_download_url
+    })) || []
+
     return {
       hasUpdate,
       currentVersion: pkgInfo.version,
       latestVersion,
       releaseUrl: latest.html_url,
       releaseNotes: latest.body || '暂无更新说明',
-      publishedAt: latest.published_at
+      publishedAt: latest.published_at,
+      assets
     }
   } catch (err) {
     return { error: err.message }
@@ -184,6 +214,17 @@ ipcMain.handle('load-config', () => {
     fs.writeFileSync(configPath, DEFAULT_CONFIG, 'utf8')
   }
   return getConfig()
+})
+
+ipcMain.handle('load-model-sizes', () => {
+  try {
+    if (fs.existsSync(MODEL_SIZES_PATH)) {
+      return JSON.parse(fs.readFileSync(MODEL_SIZES_PATH, 'utf8'))
+    }
+  } catch (err) {
+    appendLog(`⚠️ 加载 model-sizes.json 失败: ${err.message}`, true)
+  }
+  return null
 })
 
 ipcMain.handle('get-config-yml', () => {
@@ -212,9 +253,9 @@ ipcMain.handle('save-config-yml', (e, content) => {
 
 ipcMain.handle('save-config-obj', (e, config) => {
   try {
-    if (!config.default) config.default = {}
-    if (!config.default.output_format || config.default.output_format.trim() === '') {
-      config.default.output_format = 'png'
+    if (!config.save_setting) config.save_setting = {}
+    if (!config.save_setting.format || config.save_setting.format.trim() === '') {
+      config.save_setting.format = 'png'
     }
     const yamlContent = yaml.dump(config, { lineWidth: -1, quotingType: '"' })
     fs.writeFileSync(getConfigPath(), yamlContent, 'utf8')
@@ -302,22 +343,22 @@ ipcMain.handle('save-prompts', (e, prompts) => {
 // IPC 处理器 - 图片生成
 // ======================
 
-ipcMain.handle('generate-image', async (e, opts) => {
+ipcMain.handle('generate-image-volces', async (e, opts) => {
   const cfg = getConfig()
   const { modelKey, mode, prompt, imageUrls = [], size, strength = 0.7, maxImages } = opts
 
   // 参数校验
-  if (!cfg.api_key) return { error: 'api_key错误' }
-  if (!cfg.base_url) return { error: 'base_url地址错误' }
+  if (!cfg.volces?.api_key) return { error: 'api_key错误' }
+  if (!cfg.volces?.base_url) return { error: 'base_url地址错误' }
 
-  const model = cfg.models[modelKey]
+  const model = cfg.volces?.models?.[modelKey]
   if (!model) return { error: '不支持的模型' }
   if (!prompt) return { error: '请输入提示词' }
 
   // 构建请求体
   const payload = {
     model, prompt, size,
-    watermark: cfg.default?.watermark || false,
+    watermark: cfg.other?.watermark || false,
     stream: true,
     sequential_image_generation: 'auto',
     response_format: 'b64_json'
@@ -327,8 +368,8 @@ ipcMain.handle('generate-image', async (e, opts) => {
   if (maxImages && maxImages > 0) {
     payload.sequential_image_generation_options = { max_images: maxImages }
   }
-  if (model === cfg.models.v5) {
-    payload.output_format = cfg.default?.output_format || 'png'
+  if (model === cfg.volces?.models?.v5) {
+    payload.output_format = cfg.save_setting?.format || 'png'
   }
   if (['img2img', 'img2img_multi', 'img2img_group'].includes(mode)) {
     if (!imageUrls?.length) return { error: `[${mode}] 必须传入图片` }
@@ -340,18 +381,18 @@ ipcMain.handle('generate-image', async (e, opts) => {
   }
 
   // 记录请求日志
-  appendLog(`💡 请求 | 模型=${model} | 模式=${mode}`, true)
+  appendLog(`💡 火山引擎 请求 | 模型=${model} | 模式=${mode}`, true)
   if (cfg.dev_mode) {
-    const curl = `curl -X POST ${cfg.base_url} -H "Authorization: Bearer ${cfg.api_key}" -H "Content-Type: application/json" -d '${JSON.stringify(payload)}'`
+    const curl = `curl -X POST ${cfg.volces?.base_url} -H "Authorization: Bearer ${cfg.volces?.api_key}" -H "Content-Type: application/json" -d '${JSON.stringify(payload)}'`
     appendLog(`📝 CURL: ${curl}`, true)
   }
 
   try {
     const res = await axios({
       method: 'POST',
-      url: cfg.base_url,
+      url: cfg.volces?.base_url,
       headers: {
-        Authorization: `Bearer ${cfg.api_key}`,
+        Authorization: `Bearer ${cfg.volces?.api_key}`,
         'Content-Type': 'application/json'
       },
       data: payload,
@@ -361,7 +402,10 @@ ipcMain.handle('generate-image', async (e, opts) => {
 
     // 解析 SSE 响应
     const dataList = []
+    let lastProgress = 0
+    let totalExpected = maxImages || 1
     let usage = {}
+
     for (const line of res.data.split('\n')) {
       if (!line.startsWith('data: ')) continue
       const json = line.slice(6).trim()
@@ -370,46 +414,64 @@ ipcMain.handle('generate-image', async (e, opts) => {
         const obj = JSON.parse(json)
         if (obj.type === 'image_generation.partial_succeeded') {
           dataList.push({ b64_json: obj.b64_json })
+          lastProgress++
+          appendLog(`📝 进度 | 已生成 ${lastProgress}/${totalExpected} 张`, true)
         } else if (obj.type === 'image_generation.completed') {
           usage = obj.usage || {}
+          appendLog(`📝 完成 | usage=${JSON.stringify(usage)}`, true)
         }
-      } catch {}
+      } catch (err) {
+        appendLog(`⚠️ 解析行失败: ${err.message}`, true)
+      }
     }
 
     // 调试模式保存响应结果
     if (cfg.dev_mode) {
-      appendLog(`📝 响应结果: ${JSON.stringify(res.data)}`, true)
+      appendLog(`📝 响应结果: ${res.data.substring(0, 500)}...`, true)
     }
 
     // 自动保存图片
     const savedPaths = []
-    if (cfg.auto_save && cfg.save_dir && dataList.length > 0) {
-      const imgPrefix = getSaveImgPrefix(cfg.save_prefix)
-      const outputDir = cfg.save_dir.replace(/^~/, process.env.HOME)
+    if (cfg.save_setting?.auto && cfg.save_setting?.dir && dataList.length > 0) {
+      const imgPrefix = getSaveImgPrefix(cfg.save_setting?.prefix || '')
+      const outputDir = cfg.save_setting.dir.replace(/^~/, process.env.HOME)
       if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true })
 
-      const ext = cfg.default?.output_format || 'png'
+      const ext = cfg.save_setting?.format || 'png'
       for (let i = 0; i < dataList.length; i++) {
         const filePath = path.join(outputDir, `${imgPrefix}${i}.${ext}`)
         fs.writeFileSync(filePath, Buffer.from(dataList[i].b64_json, 'base64'))
         savedPaths.push(filePath)
+        appendLog(`💾 保存 | ${filePath}`, true)
       }
     }
 
     const base64List = dataList.map(i => i.b64_json).filter(Boolean)
-    appendLog(`✅ 完成 | 生成=${base64List.length}张 | 保存=${savedPaths.length}张`, true)
+    appendLog(`✅ 火山引擎 完成 | 生成=${base64List.length}张 | 保存=${savedPaths.length}张`, true)
 
-    return { success: true, base64List, savedPaths, usage }
+    return { success: true, base64List, savedPaths, usage, progress: { current: base64List.length, total: totalExpected } }
   } catch (err) {
     let requestId = ''
+    let errMsg = err.message
+
     if (err.response?.data) {
-      requestId = err.response.data.request_id || err.response.data.requestId || ''
-      appendLog(`📝 错误响应: ${JSON.stringify(err.response.data)}`, true)
-      saveDebugResponse(typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data), true)
+      const errData = err.response.data
+      if (typeof errData === 'string') {
+        try {
+          const parsed = JSON.parse(errData)
+          requestId = parsed.request_id || parsed.requestId || ''
+          errMsg = parsed.error?.message || parsed.message || errMsg
+        } catch {}
+      } else {
+        requestId = errData.request_id || errData.requestId || ''
+        errMsg = errData.error?.message || errData.message || errData.error || errMsg
+      }
+      appendLog(`📝 火山引擎 错误响应: ${typeof errData === 'string' ? errData : JSON.stringify(errData)}`, true)
     }
-    const errMsg = `请求失败：${err.message}${requestId ? ` (requestId: ${requestId})` : ''}`
-    appendLog(`❌ ${errMsg}`, true)
-    return { error: errMsg, requestId }
+
+    const fullErrMsg = `火山引擎请求失败：${errMsg}${requestId ? ` (requestId: ${requestId})` : ''}`
+    appendLog(`❌ ${fullErrMsg}`, true)
+    return { error: fullErrMsg, requestId }
   }
 })
 
@@ -427,6 +489,127 @@ ipcMain.handle('save-image', (e, { filePath, base64Data }) => {
       buttons: ['确定']
     })
     return { error: err.message }
+  }
+})
+
+// ======================
+// IPC 处理器 - MiniMax 文生图
+// ======================
+
+ipcMain.handle('generate-image-minimax', async (e, opts) => {
+  const cfg = getConfig()
+  const { modelKey, prompt, aspect_ratio, width, height, n = 1, style, subject_reference } = opts
+
+  // 参数校验
+  if (!cfg.minimax?.api_key) return { error: 'MiniMax api_key 未设置' }
+  if (!cfg.minimax?.base_url) return { error: 'MiniMax base_url 未设置' }
+
+  const model = cfg.minimax?.models?.[modelKey]
+  if (!model) return { error: '不支持的 MiniMax 模型' }
+  if (!prompt) return { error: '请输入提示词' }
+
+  // 从配置读取 prompt_optimizer 和 aigc_watermark
+  const promptOptimizer = cfg.minimax?.prompt_optimizer || false
+  const aigcWatermark = cfg.minimax?.aigc_watermark || false
+
+  // 构建请求体
+  const payload = {
+    model,
+    prompt,
+    response_format: 'base64',
+    n,
+    prompt_optimizer: promptOptimizer,
+    aigc_watermark: aigcWatermark
+  }
+
+  // 处理尺寸参数
+  if (aspect_ratio && model === 'image-01') {
+    payload.aspect_ratio = aspect_ratio
+  } else if (width && height && model === 'image-01') {
+    payload.width = width
+    payload.height = height
+  }
+
+  // 处理 style 参数（仅 image-01-live 支持）
+  if (style && model === 'image-01-live') {
+    payload.style = style
+  }
+
+  // 处理图生图参考图（仅 image-01-live 支持）
+  if (subject_reference && subject_reference.length > 0 && model === 'image-01-live') {
+    payload.subject_reference = subject_reference.map(ref => ({
+      type: 'character',
+      image_file: ref
+    }))
+  }
+
+  // 记录请求日志
+  appendLog(`💡 MiniMax 请求 | 模型=${model} | 比例=${aspect_ratio || `${width}x${height}`}`, true)
+  if (cfg.dev_mode) {
+    const curl = `curl -X POST ${cfg.minimax?.base_url} -H "Authorization: Bearer ${cfg.minimax?.api_key}" -H "Content-Type: application/json" -d '${JSON.stringify(payload)}'`
+    appendLog(`📝 CURL: ${curl}`, true)
+  }
+
+  try {
+    const res = await axios({
+      method: 'POST',
+      url: cfg.minimax?.base_url,
+      headers: {
+        Authorization: `Bearer ${cfg.minimax?.api_key}`,
+        'Content-Type': 'application/json'
+      },
+      data: payload,
+      timeout: 180000
+    })
+
+    const respData = res.data
+    appendLog(`📝 MiniMax 响应: ${JSON.stringify(respData).substring(0, 200)}...`, true)
+
+    // 解析响应
+    const result = {
+      success: true,
+      id: respData.id,
+      imageUrls: [],
+      imageBase64: [],
+      metadata: respData.metadata || {}
+    }
+
+    if (respData.data?.image_base64) {
+      result.imageBase64 = respData.data.image_base64
+    }
+
+    // 自动保存图片
+    const savedPaths = []
+    if (cfg.save_setting?.auto && cfg.save_setting?.dir && result.imageBase64.length > 0) {
+      const imgPrefix = getSaveImgPrefix(cfg.save_setting?.prefix || '')
+      const outputDir = cfg.save_setting.dir.replace(/^~/, process.env.HOME)
+      if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true })
+
+      const ext = cfg.save_setting?.format || 'png'
+      for (let i = 0; i < result.imageBase64.length; i++) {
+        const filePath = path.join(outputDir, `${imgPrefix}${i}.${ext}`)
+        fs.writeFileSync(filePath, Buffer.from(result.imageBase64[i], 'base64'))
+        savedPaths.push(filePath)
+        appendLog(`💾 保存 | ${filePath}`, true)
+      }
+    }
+
+    appendLog(`✅ MiniMax 完成 | 生成=${result.imageBase64.length}张 | 保存=${savedPaths.length}张`, true)
+
+    return result
+  } catch (err) {
+    let errMsg = err.message
+    let requestId = ''
+    if (err.response?.data) {
+      const errData = err.response.data
+      requestId = errData.id || ''
+      const statusMsg = errData.base_resp?.status_msg || errData.status_msg || ''
+      const statusCode = errData.base_resp?.status_code || errData.status_code || ''
+      errMsg = `MiniMax 请求失败：${statusMsg || err.message} (code: ${statusCode})${requestId ? ` (id: ${requestId})` : ''}`
+      appendLog(`📝 MiniMax 错误响应: ${JSON.stringify(errData)}`, true)
+    }
+    appendLog(`❌ ${errMsg}`, true)
+    return { error: errMsg, requestId }
   }
 })
 
@@ -457,6 +640,19 @@ ipcMain.handle('open-external', async (e, url) => {
   try {
     await shell.openExternal(url)
     return { success: true }
+  } catch (err) {
+    return { error: err.message }
+  }
+})
+
+// 下载更新文件
+ipcMain.handle('download-update', async (_, { url, filename }) => {
+  try {
+    const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 300000 })
+    const downloadPath = path.join(app.getPath('temp'), filename)
+    fs.writeFileSync(downloadPath, res.data)
+    shell.showItemInFolder(downloadPath)
+    return { success: true, path: downloadPath }
   } catch (err) {
     return { error: err.message }
   }
